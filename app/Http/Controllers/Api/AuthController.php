@@ -187,7 +187,7 @@ class AuthController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'is_active' => $user->is_active,
-            'phone_number ' => $user->phone_number,
+            'phone_number' => $user->phone_number,
             'is_mpin' => $user->mpin ? true : false,
             'role' => $user->getRoleNames()->first(),
             'created_at' => $user->created_at?->toIso8601String(),
