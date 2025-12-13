@@ -12,7 +12,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens , HasRoles;
+    use HasFactory, Notifiable, HasApiTokens, HasRoles;
 
     /**
      * The attributes that are mass assignable.
@@ -24,6 +24,7 @@ class User extends Authenticatable
         'email',
         'password',
         'google_id',
+        'is_active',
         'phone_number',
         'profile_photo_path',
     ];
@@ -49,5 +50,30 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function members()
+    {
+        return $this->hasMany(Member::class, 'user_id');
+    }
+
+    public function teams()
+    {
+        return $this->hasMany(Team::class, 'user_id');
+    }
+
+    public function hasMember(): bool
+    {
+        return $this->members()->exists();
+    }
+
+    public function hasTeam(): bool
+    {
+        return $this->teams()->exists();
+    }
+
+    public function mpin()
+    {
+        return $this->hasOne(Mpin::class);
     }
 }

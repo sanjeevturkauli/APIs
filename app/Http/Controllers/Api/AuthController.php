@@ -1,20 +1,19 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Api;
 
-use App\Enums\UserRole;
 use App\Models\User;
+use Illuminate\Support\Arr;
+use Illuminate\Http\Request;
 use App\Traits\ResponseHandler;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use Spatie\Permission\Models\Role;
+use Illuminate\Support\Facades\Log;
+use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Arr;
-use Illuminate\Validation\Rules\Password;
 use Laravel\Sanctum\PersonalAccessToken;
-use Spatie\Permission\Models\Role;
+use Illuminate\Support\Facades\Validator;
 use Symfony\Component\HttpFoundation\Response;
 
 class AuthController extends Controller
@@ -40,7 +39,7 @@ class AuthController extends Controller
         });
 
         if ($validator->fails()) {
-            return $this->error(422, $validator->errors()->first(), [], false);
+            return $this->response(422, $validator->errors()->first(), [], false);
         }
 
         $validatedData = $validator->validated();
@@ -53,13 +52,12 @@ class AuthController extends Controller
             'google_id' => $data['google_id'] ?? null,
         ]);
 
-        // Create or get 'member' role and assign it
         $memberRole = Role::firstOrCreate(['name' => 'member']);
         $user->assignRole($memberRole);
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return $this->success(Response::HTTP_CREATED, 'User registered successfully.', [
+        return $this->response(Response::HTTP_CREATED, 'User registered successfully.', [
             'user' => $this->formatUser($user),
             'token' => $token,
             'token_type' => 'Bearer',
@@ -84,7 +82,7 @@ class AuthController extends Controller
         });
 
         if ($validator->fails()) {
-            return $this->error(422, $validator->errors()->first(), [], false);
+            return $this->response(422, $validator->errors()->first(), [], false);
         }
 
         $credentials = $validator->validated();
@@ -92,22 +90,22 @@ class AuthController extends Controller
         if ($request->type === 'email') {
             $emailCreds = Arr::only($credentials, ['email', 'password']);
             if (!Auth::attempt($emailCreds)) {
-                return $this->error(Response::HTTP_UNAUTHORIZED, 'The provided credentials are incorrect.', [], false);
+                return $this->response(Response::HTTP_UNAUTHORIZED, 'The provided credentials are incorrect.', [], false);
             }
             $user = Auth::user();
         } else if ($request->type === 'google') {
             $user = User::where('email', $credentials['email'])->first();
 
             if (!$user) {
-                return $this->error(Response::HTTP_UNAUTHORIZED, 'User not found. Please register first.', [], false);
+                return $this->response(Response::HTTP_UNAUTHORIZED, 'User not found. Please register first.', [], false);
             }
 
             if (!$user->google_id) {
-                return $this->error(Response::HTTP_UNAUTHORIZED, 'This email is not registered with Google login.', [], false);
+                return $this->response(Response::HTTP_UNAUTHORIZED, 'This email is not registered with Google login.', [], false);
             }
 
             if ($user->google_id !== $credentials['google_id']) {
-                return $this->error(Response::HTTP_UNAUTHORIZED, 'Invalid Google login credentials.', [], false);
+                return $this->response(Response::HTTP_UNAUTHORIZED, 'Invalid Google login credentials.', [], false);
             }
 
             Auth::login($user);
@@ -115,11 +113,7 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        if ($request->filled('fcm_token')) {
-            $this->storeFcmToken($request, $user);
-        }
-
-        return $this->success(Response::HTTP_OK, 'User logged in successfully.', [
+        return $this->response(Response::HTTP_OK, 'User logged in successfully.', [
             'user' => $this->formatUser($user),
             'token' => $token,
             'token_type' => 'Bearer',
@@ -131,20 +125,20 @@ class AuthController extends Controller
         $token = $request->bearerToken();
 
         if (!$token) {
-            return $this->error(400, 'No token provided.', [], false);
+            return $this->response(400, 'No token provided.', [], false);
         }
 
         $accessToken = PersonalAccessToken::findToken($token);
 
         if (!$accessToken) {
-            return $this->error(400, 'No active token found for the user.', [], false);
+            return $this->response(400, 'No active token found for the user.', [], false);
         }
 
         if ($accessToken->delete()) {
-            return $this->success(200, 'logged out successful.', [], true);
+            return $this->response(200, 'logged out successful.', [], true);
         }
 
-        return $this->error(500, 'logged out unsuccessful', [], false);
+        return $this->response(500, 'logged out unsuccessful', [], false);
     }
 
     public function profile(Request $request): JsonResponse
@@ -160,11 +154,10 @@ class AuthController extends Controller
                     $user->phone_number = $request->phone_number;
                 }
 
-                if ($request->hasFile('profile_photo')) {
+                if ($request->hasFile('profile')) {
                     try {
-                        // Upload file using helper function
                         $filePath = uploadFile(
-                            $request->file('profile_photo'),
+                            $request->file('profile'),
                             'profile-images',
                             'profile',
                             $user->profile_photo_path
@@ -172,33 +165,27 @@ class AuthController extends Controller
 
                         $user->profile_photo_path = $filePath;
                     } catch (\Exception $e) {
-                        \Log::error('Profile photo upload failed: ' . $e->getMessage());
-                        // Continue without updating photo
+                        Log::error('Profile photo upload failed: ' . $e->getMessage());
                     }
                 }
 
                 $user->save();
-
-                if ($request->filled('fcm_token')) {
-                    $this->storeFcmToken($request, $user);
-                }
             }
 
             $msg = $request->isMethod('post') ? 'Profile update successfully' : 'Profile fetched successfully';
 
-            return response()->json([
-                'status' => true,
-                'message' => $msg,
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'is_active' => $user->is_active,
-                    'profile_url' => $user->profile_photo_path ? asset('storage/' . $user->profile_photo_path) : null,
-                ]
-            ]);
+            $data = [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'is_active' => $user->is_active,
+                'phone_number' => $user->phone_number,
+                'profile_url' => $user->profile_photo_path ? asset($user->profile_photo_path) : null,
+            ];
+
+            return $this->response(200, $msg, $data, true);
         } catch (\Throwable $th) {
-            return $this->error(500, $th->getMessage(), [], false);
+            return $this->response(500, $th->getMessage(), [], false);
         }
     }
 
@@ -208,6 +195,7 @@ class AuthController extends Controller
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
+            'is_active' => $user->is_active,
             'role' => $user->getRoleNames()->first(),
             'created_at' => $user->created_at?->toIso8601String(),
             'updated_at' => $user->updated_at?->toIso8601String(),
