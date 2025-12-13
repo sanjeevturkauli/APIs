@@ -174,16 +174,7 @@ class AuthController extends Controller
 
             $msg = $request->isMethod('post') ? 'Profile update successfully' : 'Profile fetched successfully';
 
-            $data = [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'is_active' => $user->is_active,
-                'phone_number' => $user->phone_number,
-                'profile_url' => $user->profile_photo_path ? asset($user->profile_photo_path) : null,
-            ];
-
-            return $this->response(200, $msg, $data, true);
+            return $this->response(200, $msg, $this->formatUser($user), true);
         } catch (\Throwable $th) {
             return $this->response(500, $th->getMessage(), [], false);
         }
@@ -196,6 +187,7 @@ class AuthController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'is_active' => $user->is_active,
+            'is_mpin'=> $user->mpin ? true : false,
             'role' => $user->getRoleNames()->first(),
             'created_at' => $user->created_at?->toIso8601String(),
             'updated_at' => $user->updated_at?->toIso8601String(),
