@@ -105,7 +105,7 @@ class MpinController extends Controller
 
             $data = $mpin->only(['id', 'user_id', 'updated_at']);
 
-            return $this->response(200, 'MPIN updated successfully.', $data, false);
+            return $this->response(200, 'MPIN updated successfully.', $data, true);
         } catch (\Throwable $th) {
             return $this->response(500, $th->getMessage(), [], false);
         }
