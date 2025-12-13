@@ -7,6 +7,6 @@ Route::get('/test', function (Request $request) {
     return response()->json([
         'status'=>'success',
         'statusCode'=>200,
-        'message'=>"API successfuly tested ok."
+        'message'=>"API successfuly tested Latest ok."
     ]);
 });
